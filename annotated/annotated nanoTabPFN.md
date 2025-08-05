@@ -40,8 +40,8 @@
 <!-- tocstop -->
 
 # Introduction
-NanoTabPFN is based on [TabPFN](https://github.com/PriorLabs/TabPFN), a transformer-based architecture specifically designed for tabular data. TabPFN treats tabular data as a 2D structure requiring attention mechanisms that capture relationships both across features (columns) and across datapoints (rows). TabPFN allows for both regression and classification tasks. 
-This guide provides a walkthrough of the NanoTabPFN architecture, explaining each component and the intuitions behind the design choices (at least it tries 😊). Most of the examples are based on a classification task, but the same principles apply to regression tasks as well.
+nanoTabPFN is based on [TabPFN](https://github.com/PriorLabs/TabPFN), a transformer-based architecture specifically designed for tabular data. TabPFN treats tabular data as a 2D structure requiring attention mechanisms that capture relationships both across features (columns) and across datapoints (rows). TabPFN allows for both regression and classification tasks. 
+This guide provides a walkthrough of the nanoTabPFN architecture, explaining each component and the intuitions behind the design choices (at least it tries 😊). Most of the examples are based on a classification task, but the same principles apply to regression tasks as well.
 
 # In-Context Learning 
 
@@ -67,7 +67,7 @@ The key insight is that the model learns the task structure from the examples th
 
 ## In-Context Learning on Tabular Data
 
-TabPFN and its authors are among the first to implement in-context learning for tabular data. Instead of training on a specific dataset, it learns from the training / context examples. The pre-trained model uses the training examples to understand the relationships between features and targets, and then applies this understanding to make predictions on new test examples.:
+TabPFN and its authors are among the first to implement in-context learning for tabular data. Instead of training on a specific dataset, it learns from the training / context examples. The pre-trained model uses the training examples to understand the relationships between features and targets, and then applies this understanding to make predictions on new test examples:
 
 ```
 Context (Training Data / Classification Examples):
@@ -168,7 +168,7 @@ Output: Logits for classification or raw values for regression
 ## The Main Model Class: Overview
 
 ```python
-class NanoTabPFNModel(nn.Module):
+class nanoTabPFNModel(nn.Module):
     def __init__(self, embedding_size: int, num_attention_heads: int, mlp_hidden_size: int, num_layers: int, num_outputs: int):
         """ Initializes the feature/target encoder, transformer stack and decoder """
         super().__init__()
