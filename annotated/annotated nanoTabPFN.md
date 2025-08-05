@@ -42,6 +42,7 @@
 # Introduction
 NanoTabPFN is based on [TabPFN](https://github.com/PriorLabs/TabPFN), a transformer-based architecture specifically designed for tabular data. TabPFN treats tabular data as a 2D structure requiring attention mechanisms that capture relationships both across features (columns) and across datapoints (rows). TabPFN allows for both regression and classification tasks. 
 This guide provides a walkthrough of the NanoTabPFN architecture, explaining each component and the intuitions behind the design choices (at least it tries 😊). Most of the examples are based on a classification task, but the same principles apply to regression tasks as well.
+
 ---
 
 # In-Context Learning 
