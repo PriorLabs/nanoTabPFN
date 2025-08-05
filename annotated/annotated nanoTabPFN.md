@@ -43,8 +43,6 @@
 NanoTabPFN is based on [TabPFN](https://github.com/PriorLabs/TabPFN), a transformer-based architecture specifically designed for tabular data. TabPFN treats tabular data as a 2D structure requiring attention mechanisms that capture relationships both across features (columns) and across datapoints (rows). TabPFN allows for both regression and classification tasks. 
 This guide provides a walkthrough of the NanoTabPFN architecture, explaining each component and the intuitions behind the design choices (at least it tries 😊). Most of the examples are based on a classification task, but the same principles apply to regression tasks as well.
 
----
-
 # In-Context Learning 
 
 In-context learning (ICL) is a paradigm where a pre-trained model learns to perform tasks by observing examples within its input, without updating its parameters. The model uses the provided examples as context to understand the task and make predictions on new inputs.
@@ -92,7 +90,6 @@ Query (Test Data):
    - What targets those similar examples had
    - Feature relationships learned from the training data
 
----
 
 # Synthetic Data Pre-Training
 TabPFN's ability to perform in-context learning on diverse tabular datasets stems from its pre-training on millions of synthetic datasets generated through Structural Causal Models (SCMs) before it ever sees real-world data. This synthetic data generation process is crucial for enabling the model to learn a general-purpose tabular prediction algorithm.
@@ -138,7 +135,6 @@ TabPFN_model((X_train, y_train), X_test)  → Forward Pass → Predictions # no 
 
 This is fundamentally different from traditional ML approaches that require training models for each specific dataset. Instead, TabPFN learns a general prior over tabular data tasks during pre-training and applies this prior using the context provided at inference time. The model essentially asks: "Given what I learned about tabular data patterns during pre-training, and given these specific training examples, what should I predict for given test examples?"
 
----
 
 # Overview of the Architecture
 <br>
@@ -791,8 +787,6 @@ The decoder is a simple two-layer MLP that maps the rich target embeddings to th
 output = Linear₂(GELU(Linear₁(target_embeddings)))
 ```
 
----
-
 # Conclusion
 
 The TabPFN architecture represents a sophisticated adaptation of transformer attention mechanisms for tabular data. By treating each feature as a token and implementing dual attention across both features and datapoints, the model captures rich interactions.
@@ -803,7 +797,6 @@ The key insights are:
 3. **Causal Information Flow**: The asymmetric attention pattern maintains the train - test separation, allowing the model to learn from training data while making predictions on test data
 
 This architecture demonstrates how transformer-based models can be thoughtfully adapted to new domains while preserving their core strengths of attention-based learning and parallel processing.
-
 
 
 # A Note on Current Limitations
