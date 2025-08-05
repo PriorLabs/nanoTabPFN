@@ -1,6 +1,5 @@
 # The Annotated nanoTabPFN
 
----
 <!-- toc -->
 - [Introduction](#introduction)
 - [In-Context Learning](#in-context-learning)
@@ -39,8 +38,6 @@
 - [A Note on Current Limitations](#a-note-on-current-limitations)
 - [References](#references)
 <!-- tocstop -->
-
----
 
 # Introduction
 NanoTabPFN is based on [TabPFN](https://github.com/PriorLabs/TabPFN), a transformer-based architecture specifically designed for tabular data. TabPFN treats tabular data as a 2D structure requiring attention mechanisms that capture relationships both across features (columns) and across datapoints (rows). TabPFN allows for both regression and classification tasks. 
@@ -102,7 +99,7 @@ TabPFN's ability to perform in-context learning on diverse tabular datasets stem
 <br>
 <br>
 ![TabPFN data](figures/synthetic_data.png)
-<small><small>[Source:Hollmann et al.: Accurate predictions on small data with a tabular foundation model. Nature 637, 319–326 (2025).](https://www.nature.com/articles/s41586-024-08328-6)</small></small>
+<small><small>[Source: Hollmann et al.: Accurate predictions on small data with a tabular foundation model. Nature 637, 319–326 (2025).](https://www.nature.com/articles/s41586-024-08328-6)</small></small>
 <br>
 <br>
 
@@ -147,7 +144,7 @@ This is fundamentally different from traditional ML approaches that require trai
 <br>
 
 ![TabPFN architecture](figures/architecture.png)
-<small><small>[Source:Hollmann et al.: Accurate predictions on small data with a tabular foundation model. Nature 637, 319–326 (2025).](https://www.nature.com/articles/s41586-024-08328-6)</small></small>
+<small><small>[Source: Hollmann et al.: Accurate predictions on small data with a tabular foundation model. Nature 637, 319–326 (2025).](https://www.nature.com/articles/s41586-024-08328-6)</small></small>
 <br>
 <br>
 
