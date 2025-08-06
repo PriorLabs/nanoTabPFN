@@ -629,10 +629,53 @@ This creates 18 independent sequences, one for each feature/column across both b
 - This captures inter-sample dependencies: how similar datapoints influence predictions
 
 
-### Why Dual Attention Design?
+## Why Dual Attention Instead of Flattened Attention?
+
+### The Alternative: Flattened Attention
+
+One might wonder why TabPFN uses dual attention with careful reshaping instead of simply flattening the table and using standard transformer attention. Let's examine what would happen with a naive flattening approach:
+
+**Input shape `(B, R*C, E)` - Flattening all cells into a single sequence:**
+
+Standard transformers expect `(batch_size, sequence_length, embedding_dim)`, so with `(B, R*C, E)`:
+- **Batch dimension**: `B`
+- **Sequence length**: `R*C` (all cells flattened into one long sequence)
+- **What attention computes**: Every cell attends to every other cell in the entire table
+
+```python
+# Flattened view - each element can attend to all others:
+[row1_feat1, row1_feat2, ..., row1_featC, row2_feat1, ..., rowR_featC]
+     ↓            ↓                ↓           ↓              ↓
+   Can all attend to each other (R*C × R*C attention matrix)
+```
+
+**Critical problems with this approach:**
+- **Loses 2D structure**: The model doesn't know which cells are in the same row or column
+- **Computational explosion**: Attention matrix is `(R*C) × (R*C)` - quadratic in total table size rather than separate quadratic complexities for rows and columns
+- **No inductive bias**: No inherent notion of "this is a feature" vs "this is a datapoint" - the model would have to learn these relationships from scratch
+- **Poor scaling**: For a modest 100×50 table, this creates a 5000×5000 attention matrix (25M values) vs TabPFN's approach: 100×100 + 50×50 (12.5K values)
+
+### Why TabPFN's Dual Attention is Superior
+
+TabPFN's reshaping preserves the tabular structure while maintaining computational efficiency:
+
+**Computational Advantage:**
+- TabPFN: `O(R²×C) + O(C²×R)` with dual attention  
+- Flattened: `O((R×C)²)` - significantly more expensive
+
+**Inductive Bias:**
+The dual attention design builds in the correct inductive bias for tabular data - that relationships within rows (across features) and within columns (across samples) have different semantic meanings and should be modeled separately. This is why TabPFN can generalize effectively to new datasets without seeing them during training.
 
 1. **Feature Attention** answers: "Which features are important for this specific sample?"
 2. **Datapoint Attention** answers: "How do similar samples influence each other based on their feature values?"
+
+
+
+
+
+
+
+
 
 ## The Causal Attention Between Datapoints (Row-wise)
 
