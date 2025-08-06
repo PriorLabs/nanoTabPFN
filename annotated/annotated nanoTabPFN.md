@@ -181,9 +181,7 @@ Unlike sequential models, transformers offer:
 - Parallelization across sequence length during training
 - Efficient batch processing on modern hardware (GPUs)
 
-
-
-These advantages make transformers well-suited for foundation models for diverse tabular datasets without task-specific modifications. While challenges remain - particularly the quadratic complexity for large datasets - the flexibility, and expressiveness make transformers the architecture of choice for tabular foundation models.
+These advantages make transformers well-suited for foundation models for diverse tabular datasets without task-specific modifications. While challenges remain - particularly the quadratic complexity for large datasets - the flexibility, and expressiveness make transformers the architecture of choice for tabular foundation models. It is important to note that TabPFN uses only the transformer encoder because tabular prediction is a task where we need to classify/regress all test samples simultaneously based on the provided context, not generate outputs sequentially like in language generation. The "decoder" in TabPFN is simply a MLP that maps the enriched target embeddings from the transformer encoder to final predictions - it's not a transformer decoder at all. This design mirrors architectures where transformer encoders extract rich representations that are then passed through task-specific heads, rather than GPT-style decoders that generate tokens autoregressively.
 
 
 
