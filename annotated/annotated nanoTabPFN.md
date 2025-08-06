@@ -7,6 +7,7 @@
   - [In-Context Learning on Tabular Data](#in-context-learning-on-tabular-data)
 - [Synthetic Data Pre-Training](#synthetic-data-pre-training)
   - [Advantages of In-Context Learning for Tabular Data](#advantages-of-in-context-learning-for-tabular-data)
+- [What makes Transformers a Candidate Architecture for Tabular Foundation Models?](#what-makes-transformers-a-candidate-architecture-for-tabular-foundation-models)
 - [Overview of the Architecture](#overview-of-the-architecture)
   - [The Main Model Class: Overview](#the-main-model-class-overview)
   - [Feature Encoder: Converting Raw Features to Embeddings](#feature-encoder-converting-raw-features-to-embeddings)
@@ -134,6 +135,56 @@ TabPFN_model((X_train, y_train), X_test)  → Forward Pass → Predictions # no 
 3. **Sample Efficiency**: Can make predictions with few training examples
 
 This is fundamentally different from traditional ML approaches that require training models for each specific dataset. Instead, TabPFN learns a general prior over tabular data tasks during pre-training and applies this prior using the context provided at inference time. The model essentially asks: "Given what I learned about tabular data patterns during pre-training, and given these specific training examples, what should I predict for given test examples?"
+
+
+## What makes Transformers a Candidate Architecture for Tabular Foundation Models?
+
+While transformers were originally designed for sequential data, they offer several advantages for tabular data that explain their emergence as the dominant architecture for tabular foundation models:
+
+### **Permutation Equivariance**
+Transformers naturally handle the fact that:
+- Feature order in tabular data is arbitrary (columns can be reordered; adding unique feature identifiers can help with permutation equivariance)
+- Row order often doesn't matter (samples are exchangeable)
+- The architecture treats all positions symmetrically, learning what matters from data
+- This property aligns well with the exchangeability assumption for i.i.d. samples in tabular datasets, allowing the model to learn relationships without being biased by feature or sample order.
+
+### **Natural Handling of Set-Structured Data**
+Tabular data can be viewed as sets where:
+- Each row is an element in a set of samples
+- Each column is an element in a set of features
+- Transformers' set-to-set mapping aligns with this structure
+- No artificial ordering constraints are imposed
+- Other models like [TabICL](https://github.com/soda-inria/tabicl) use Set-Transformer architectures to further leverage the set structure of tabular data
+
+### **Variable-Size Inputs**
+Through tokenization, transformers elegantly handle:
+- Datasets with different numbers of features
+- Variable numbers of samples
+
+### **In-Context Learning Capabilities**
+Transformers excel at learning from examples within their input, enabling:
+- Zero-shot generalization to new datasets
+- Learning the prediction task from train examples without parameter updates
+- Adapting to dataset-specific patterns on the fly
+- Implicit meta-learning through the attention mechanism
+
+### **Emergence of Dataset-Specific Algorithms**
+Through in-context learning, transformers can:
+- Implicitly learn and execute dataset-specific prediction strategies
+- Adapt their "algorithm" based on the observed training examples
+- Implement gradient descent in their forward pass
+- Approximate Bayesian inference
+- Learn and execute complex algorithms (like TabPFN approximating Bayesian inference)
+
+### **Scalable Parallelization**
+Unlike sequential models, transformers offer:
+- Parallelization across sequence length during training
+- Efficient batch processing on modern hardware (GPUs)
+
+
+
+These advantages make transformers well-suited for foundation models for diverse tabular datasets without task-specific modifications. While challenges remain - particularly the quadratic complexity for large datasets - the flexibility, and expressiveness make transformers the architecture of choice for tabular foundation models.
+
 
 
 # Overview of the Architecture
