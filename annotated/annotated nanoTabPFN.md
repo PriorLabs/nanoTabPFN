@@ -142,11 +142,15 @@ This is fundamentally different from traditional ML approaches that require trai
 While transformers were originally designed for sequential data, they offer several advantages for tabular data that explain their emergence as the dominant architecture for tabular foundation models:
 
 ### **Permutation Equivariance**
-Transformers naturally handle the fact that:
-- Feature order in tabular data is arbitrary (columns can be reordered; adding unique feature identifiers can help with permutation equivariance)
-- Row order often doesn't matter (samples are exchangeable)
-- The architecture treats all positions symmetrically, learning what matters from data
-- This property aligns well with the exchangeability assumption for i.i.d. samples in tabular datasets, allowing the model to learn relationships without being biased by feature or sample order.
+
+Equivariance vs. invariance: Equivariance means that if you permute the inputs, the outputs permute in exactly the same way; invariance means the outputs remain unchanged regardless of input order.
+
+Why this matters for tabular data: In tabular tasks, we want permutation invariance in our final predictions - the model's predictions shouldn't depend on arbitrary row or column ordering. Transformers achieve this through their natural permutation equivariance property, which maintains consistent internal behavior under reordering while enabling invariant final outputs through appropriate aggregation or selection mechanisms.
+
+How transformers handle different dimensions:
+
+- Feature columns have semantic identity: feature order in tabular data is arbitrary (columns can be reordered), but each feature has its own semantic meaning (e.g., "age" ≠ "income" ≠ "temperature"). Without extra information, a transformer will treat all feature columns symmetrically - swapping two columns simply swaps their embeddings, with no way for the model to know which feature is which. This preserves symmetry but destroys feature identity. In practice, TabPFN and similar models add positional/feature index embeddings (a unique learned vector for each feature) to intentionally break pure permutation equivariance over columns, allowing the model to preserve and consistently recognize each feature's identity even if the columns are reordered.
+- Sample rows are exchangeable: for i.i.d. data, row order typically doesn't matter (samples are exchangeable), and unlike features, individual rows have no fixed semantic identity - they are just independent observations drawn from the same distribution. For most tabular tasks, we care only about making the correct prediction for each row, not about the position of that row in the dataset. Permutation equivariance ensures that if you shuffle the rows in the input, the model's outputs shuffle in exactly the same way, preserving the one-to-one correspondence between each sample and its prediction.
 
 ### **Natural Handling of Set-Structured Data**
 Tabular data can be viewed as sets where:
@@ -194,7 +198,7 @@ These advantages make transformers well-suited for foundation models for diverse
 <br>
 <br>
 
-The TabPFN model processes tabular data through the following pipeline:
+The nanoTabPFN model processes tabular data through the following pipeline:
 
 ```
 Input: (X_train, y_train, X_test) or (X_concat, y_train), where X_concat is the concatenation of train and test data
@@ -250,6 +254,7 @@ class FeatureEncoder(nn.Module):
                            the embeddings of the features
         """
         x = x.unsqueeze(-1)
+        # This is per-feature, per-batch standardization using only train rows
         mean = torch.mean(x[:, :single_eval_pos], axis=1, keepdims=True)
         std = torch.std(x[:, :single_eval_pos], axis=1, keepdims=True) + 1e-20
         x = (x-mean)/std
@@ -343,6 +348,8 @@ The token-based approach is essential because:
 
 This flexibility is crucial for pre-trained models like TabPFN that need to generalize across datasets with varying dimensionalities. The model learns a universal "feature embedding function" rather than dataset-specific feature combinations.
 
+#### Note on Feature Index Embeddings
+In the original TabPFN architecture, each feature token is augmented with a learned feature index embedding - a fixed-size trainable vector tied to each column’s identity. This is conceptually similar to positional embeddings in NLP in that it injects index-based information, but unlike the sinusoidal encodings often used in language models, these are learned parameters. This ensures the model consistently recognizes a specific feature across different datasets, even if columns are reordered.
 
 ## Target Encoder: Handling Labels with Padding
 
@@ -381,7 +388,7 @@ mean = torch.mean(y_train, axis=1, keepdim=True)  # Per-batch mean
 padding = mean.repeat(1, num_rows - y_train.shape[1], 1)
 y_padded = torch.cat([y_train, padding], dim=1)
 ```
-Using the training mean as padding provides a reasonable prior for unknown test labels while maintaining the model's ability to learn from the attention mechanism. The padding is needed since the targets are included in the same batch tensor as the features, and the model expects a consistent shape for all columns. Other models like [TabICL](https://github.com/soda-inria/tabicl) concatenate the train-target embeddings to the column and row emebddings of the train set at the end before entering the final attention blocks, so that no padding is needed. This is a valid approach, but TabPFN's design allows the model to potentially learn richer relationships between features and targets from the start.
+Using the training mean as padding provides a reasonable prior for unknown test labels while maintaining the model's ability to learn from the attention mechanism. The padding is needed since the targets are included in the same batch tensor as the features, and the model expects a consistent shape for all columns. Other models like [TabICL](https://github.com/soda-inria/tabicl) concatenate the train-target embeddings to the column and row emebddings of the train set at the end before entering the final attention blocks, so that no padding is needed. This is a valid approach, but TabPFN's design allows the model to potentially learn richer relationships between features and targets from the start. One important implication of this padding strategy is that all test targets start with identical constant embeddings before any attention layers are applied. As a result, the model must infer test labels entirely from the relationships it learns between the training features and their corresponding targets. The constant padding itself does not carry any discriminative information for the test set - its role is purely to preserve tensor shape and allow the target column to participate in attention from the first layer onward.
 
 ### Shape Transformations in Target Encoder
 ```
@@ -513,7 +520,7 @@ def forward(self, src: torch.Tensor, single_eval_position: int) -> torch.Tensor:
         src_left = self.self_attn_between_datapoints(src[:,:single_eval_position], src[:,:single_eval_position], src[:,:single_eval_position])[0]
         # test data attends to the training data
         src_right = self.self_attn_between_datapoints(src[:,single_eval_position:], src[:,:single_eval_position], src[:,:single_eval_position])[0]
-        # +src is a residual connection
+        # +src is a residual connection with the original src before attention
         src = torch.cat([src_left, src_right], dim=1)+src
         src = src.reshape(batch_size, col_size, rows_size, embedding_size)
         src = src.transpose(2, 1)
@@ -657,29 +664,29 @@ Standard transformers expect `(batch_size, sequence_length, embedding_dim)`, so 
 
 ### Why TabPFN's Dual Attention is Superior
 
-TabPFN's reshaping preserves the tabular structure while maintaining computational efficiency:
-
-**Computational Advantage:**
-- TabPFN: `O(R²×C) + O(C²×R)` with dual attention  
-- Flattened: `O((R×C)²)` - significantly more expensive
+**Efficiency:** TabPFN's reshaping preserves the tabular structure while maintaining computational efficiency.
 
 **Inductive Bias:**
-The dual attention design builds in the correct inductive bias for tabular data - that relationships within rows (across features) and within columns (across samples) have different semantic meanings and should be modeled separately. This is why TabPFN can generalize effectively to new datasets without seeing them during training.
+The dual attention design builds in the correct inductive bias for tabular data - that relationships within rows (across features) and within columns (across samples) have different semantic meanings and should be modeled separately. 
 
 1. **Feature Attention** answers: "Which features are important for this specific sample?"
 2. **Datapoint Attention** answers: "How do similar samples influence each other based on their feature values?"
 
-
-
-
-
+This is why TabPFN can generalize effectively to new datasets without seeing them during training.
 
 
 
 
 ## The Causal Attention Between Datapoints (Row-wise)
 
-In contrast to feature attention, the datapoint attention requires a causal structure. This is crucial for maintaining the integrity of supervised learning, where training data should not be influenced by test data. The attention mechanism is designed to respect this causal structure. Causal masking is commonly applied in, e.g., in time series forecasting, to ensure that the model does not "peek" at future data points when creating forecasts. In TabPFN, the causal masking ensures that all train datapoints can attend to each other, but test datapoints can only attend to training datapoints. This is implemented in the `self_attn_between_datapoints` layer, which uses a causal mask to esnures this structure.
+In contrast to feature attention, the datapoint attention requires a causal structure. This is crucial for maintaining the integrity of supervised learning, where training data should not be influenced by test data. The attention mechanism is designed to respect this causal structure. While in time series forecasting this is often implemented via an explicit causal mask, in TabPFN the same effect is achieved by splitting the attention calculation into two parts:
+
+- Training datapoints attend only to other training datapoints (bidirectional)
+
+- Test datapoints attend only to training datapoints (unidirectional)
+
+This selective information flow is implemented in the `self_attn_between_datapoints` layer by explicitly separating the query/key/value tensors for train and test portions, rather than by applying a mask matrix. 
+
 
 **Implementation Details:**
 ```python
@@ -713,12 +720,12 @@ This implementation is crucial for maintaining the causal structure of supervise
 2. Test datapoints can only receive information from training datapoints
 3. This preserves the fundamental ML assumption that test data cannot influence training
 
-The causal mask is only used for datapoint attention because:
+The splitting of the attention calculation is only used for datapoint attention because:
 - Training datapoints should be able to learn from each other (bidirectional attention)
 - Test datapoints should only be able to "look at" training datapoints to make predictions
 - Without this mask, test data could influence the representations of training data during training
 
-For feature attention, there's no need for a causal mask because:
+Feature attention does not require separating train and test rows, since:
 - Each row (datapoint) processes its features independently
 - Whether a row is from the training or test set, all its features are already known/observed
 - Features within a single datapoint don't have a temporal or causal relationship - they're all observed simultaneously
@@ -726,9 +733,6 @@ For feature attention, there's no need for a causal mask because:
 ## Why Feature and then Datapoint Attention?
 
 The order of attention operations in TabPFN - feature attention followed by datapoint attention - is a deliberate design choice that differs from alternatives like [TabICL](https://github.com/soda-inria/tabicl), which reverses this order. This sequence has important implications for how information flows through the model.  It is important to note that the optimal attention order remains an open research question - different orderings may work better for different types of tabular data or tasks, and more empirical investigation is needed to determine when each approach works best.
-
-
-
 
 
 ## Parameter Sharing Across Batches and Sequences
@@ -739,74 +743,117 @@ Even though each sequence (column-wise or row-wise) is processed independently -
 * **Consistent Modeling:** Each row or column sequence is modeled using the same learned representation capacity, improving generalization and reducing parameter count
 * **Parallelism & Efficiency:** You get full parallel processing on the batch axis while learning a shared set of Transformer parameters
 
-## Layer Normalization vs. Batch Normalization
+## **Layer Normalization vs. Batch Normalization**
 
-Normalization is a crucial component in deep neural networks that stabilizes training by preventing internal covariate shift - the effect where the distribution of inputs to each layer changes during training as parameters update. Without normalization, gradients can vanish or explode, especially in deep networks, making optimization difficult. By standardizing inputs to have consistent statistical properties, normalization enables faster convergence, and often improves generalization. While the core idea is simple - standardize inputs and optionally rescale them - the choice of which dimensions to normalize over has implications for model behavior, particularly in tabular data settings.
+Normalization is a crucial component in deep neural networks that stabilizes training by reducing internal covariate shift - the change in the distribution of layer inputs as parameters update during training. Without normalization, gradients can vanish or explode, making optimization difficult. By standardizing inputs to have consistent statistical properties, normalization enables faster convergence and can improve generalization. In nanoTabPFN, only Layer Normalization is used. Batch Normalization is described here purely for comparison, to highlight why LayerNorm is better suited for heterogeneous tabular data.
 
-#### 1. Batch Normalization (BatchNorm)
 
-##### Normalization axis
-Over the `batch_size` and the `n_rows` dimension, applied **per feature**.
+### **1. Batch Normalization (BatchNorm) - Not used in TabPFN**
 
-##### What does it normalize:
-For each feature dimension `f`, BatchNorm computes
-- Mean and variance across batch and rows
-$$
-\mu_f = \frac{1}{B \cdot R} \sum_{b=1}^{B} \sum_{r=1}^{R} x_{b, r, f}
-$$
-$$
-\sigma_f^2 = \frac{1}{B \cdot R} \sum_{b=1}^{B} \sum_{r=1}^{R} \left(x_{b, r, f} - \mu_f\right)^2
-$$
+#### **Normalization axis**
 
-- Then normalizes and applies learnable scale ($\gamma_f$) and shift ($\beta_f$) parameters
+If BatchNorm were applied to a tensor of shape
 
 $$
-\hat{x}_{b, r, f} = \frac{x_{b, r, f} - \mu_f}{\sqrt{\sigma_f^2 + \epsilon}}
+(B, R, C+1, E)
 $$
 
-$$
-y_{b, r, f} = \gamma_f \cdot \hat{x}_{b, r, f} + \beta_f
-$$
+in the nanoTabPFN pipeline, it would normalize per embedding dimension $e \in [1, E]$, computing statistics across the batch dimension $B$ and all row–column positions $(R, C+1)$.
 
-where $\gamma_f$ (scale) and $\beta_f$ (shift) are learnable parameters that rescale / shift the normalized output for feature $f$.These allow the model to restore any necessary mean/variance if the normalization removes useful distributional properties.
-
-
-##### When is it useful?
-- Works well when samples in the batch are from the same distribution
-- Can introduce issues in tabular settings where each batch element is a different dataset with varying distributions, i.e., cross-dataset statistics can become meaningless
-
-#### 2. Layer Normalization (LayerNorm)
-
-##### Normalization axis
-Over the feature dimension `n_features`, applied independently to each row
-
-##### What does it normalize:
-For each individual row `x[b, r, :]`, LayerNorm computes
-
-- Mean and variance for that row
-$$
-\mu_{b,r} = \frac{1}{F} \sum_{f=1}^{F} x_{b, r, f}
-$$
-$$
-\sigma_{b,r}^2 = \frac{1}{F} \sum_{f=1}^{F} \left(x_{b, r, f} - \mu_{b,r}\right)^2
-$$
-
-- Then normalizes and applies learnable scale ($\gamma_f$) and shift ($\beta_f$) parameters
+Equivalently, the first three dimensions are flattened into:
 
 $$
-\hat{x}_{b, r, f} = \frac{x_{b, r, f} - \mu_{b,r}}{\sqrt{\sigma_{b,r}^2 + \epsilon}}
+N = B \cdot R \cdot (C+1)
 $$
 
+so that normalization is performed over an $(N, E)$ tensor.
+
+
+#### **Formulas**
+
+For each embedding dimension $e$:
+
+**Step 1 - Mean:**
+
 $$
-y_{b, r, f} = \gamma_f \cdot \hat{x}_{b, r, f} + \beta_f
+\mu_e = \frac{1}{N} \sum_{n=1}^N x_{n,e}
 $$
 
-where $\gamma_f$ (scale) and $\beta_f$ (shift) are learnable parameters that rescale / shift the normalized output per feature within each row.  
-These allow the model to restore any necessary mean/variance if the normalization removes useful distributional properties.
+**Step 2 - Variance:**
 
-##### When is it useful?
-- Works well when each row is an independent example, which is true in most tabular learning cases
-- Better suited for heterogeneous batches where each batch element is a different dataset with a different feature distribution
+$$
+\sigma_e^2 = \frac{1}{N} \sum_{n=1}^N \left(x_{n,e} - \mu_e\right)^2
+$$
+
+**Step 3 - Normalize:**
+
+$$
+\hat{x}_{n,e} = \frac{x_{n,e} - \mu_e}{\sqrt{\sigma_e^2 + \varepsilon}}
+$$
+
+**Step 4 - Learnable scale & bias:**
+
+$$
+y_{n,e} = \gamma_e \cdot \hat{x}_{n,e} + \beta_e
+$$
+
+where $\gamma, \beta \in \mathbb{R}^E$ are learned parameters shared across all $n$ for each embedding dimension $e$.
+
+
+#### **When is it useful?**
+
+* Works well when all samples in the batch come from the same distribution.
+* Can be problematic in tabular settings where each batch element may be a different dataset with its own distribution - cross-sample statistics can become meaningless.
+
+
+### **2. Layer Normalization (LayerNorm) - Used in TabPFN**
+
+#### **Normalization axis**
+
+In nanoTabPFN, `LayerNorm(E)` normalizes across the embedding dimension for each fixed $(b, r, c)$ triple.
+That is, for every dataset index $b$, row $r$, and column $c$, you take the vector of length $E$ and normalize it. No statistics are shared between different datasets, rows, or columns.
+
+
+#### **Formulas**
+
+For a single dataset $b$, row $r$, column $c$, let the embedding vector be:
+
+$$
+\mathbf{x} = \left( x_{b,r,c,1}, x_{b,r,c,2}, \dots, x_{b,r,c,E} \right)
+$$
+
+**Step 1 - Mean:**
+
+$$
+\mu_{b,r,c} = \frac{1}{E} \sum_{e=1}^E x_{b,r,c,e}
+$$
+
+**Step 2 - Variance:**
+
+$$
+\sigma_{b,r,c}^2 = \frac{1}{E} \sum_{e=1}^E \left(x_{b,r,c,e} - \mu_{b,r,c}\right)^2
+$$
+
+**Step 3 - Normalize:**
+
+$$
+\hat{x}_{b,r,c,e} = \frac{x_{b,r,c,e} - \mu_{b,r,c}}{\sqrt{\sigma_{b,r,c}^2 + \varepsilon}}
+$$
+
+**Step 4 - Learnable scale & bias:**
+
+$$
+y_{b,r,c,e} = \gamma_e \cdot \hat{x}_{b,r,c,e} + \beta_e
+$$
+
+where $\gamma, \beta \in \mathbb{R}^E$ are learned parameters shared across all $(b,r,c)$, but applied elementwise along $E$.
+
+
+#### **When is it useful?**
+
+* Works well when each row is an independent example.
+* Robust to heterogeneous batches where each dataset has a different feature distribution.
+* Each cell is normalized using only its own embedding vector, ensuring independence across the batch.
 
 
 #### Illustration of Layer Normalization vs. Batch Normalization
@@ -815,13 +862,11 @@ These allow the model to restore any necessary mean/variance if the normalizatio
 <br>
 Inspecting the figure, LayerNorm preserves the relative differences between features - notice how the pattern of variation across features (F0-F4) remains similar to the original data, just shifted and scaled consistently. In contrast, BatchNorm forces each feature to have the same distribution across the batch (mean≈0, variance≈1), destroying the original relationships between features and making all feature nearly identical. This makes LayerNorm better suited for tabular data where the relative scales and distributions of different features carry important information about the underlying patterns.
 
-#### Why Layer Normalization in TabPFN?
-In the TabPFN architecture, Layer Normalization is used instead of Batch Normalization. This choice is crucial for several reasons:
+#### Why Layer Normalization in nanoTabPFN?
+In the nanoTabPFN architecture, Layer Normalization is used instead of Batch Normalization. This choice is crucial for several reasons:
 1. **Independence of Rows**: Each row in the tabular data represents an independent example, and LayerNorm normalizes across features within each row, preserving this independence
-2. **Heterogeneous Batches**: TabPFN processes batches where each row can come from different datasets or distributions. LayerNorm does not assume that all rows are from the same distribution, making it more robust in this context
-3. **Sample-wise Normalization**: LayerNorm computes statistics across all features within each sample, making it independent of other samples in the batch. This is ideal when processing heterogeneous batches where samples may come from different distributions
-
-
+2. **Heterogeneous Batches**: nanoTabPFN processes batches where each row can come from different datasets or distributions. LayerNorm does not assume that all rows are from the same distribution, making it more robust in this context
+3. **Sample-wise Normalization**: Each cell is normalized using only its own embedding vector, ensuring independence across the batch
 ## Output Selection and Decoding
 
 After processing through the transformer stack, the model extracts predictions:
@@ -910,4 +955,7 @@ These limitations represent active areas of research in making transformer-based
 - [TabPFN Paper](https://www.nature.com/articles/s41586-024-08328-6)
 
 ### Time Stamp
-This document was last updated on August 5, 2025 and is based on the nanoTabPFN implementation from the TabPFN GitHub repository. The architecture and explanations are based on the latest version of the model as of this date.
+This document was last updated on August 11, 2025 and is based on the nanoTabPFN implementation from the TabPFN GitHub repository. The architecture and explanations are based on the latest version of the model as of this date.
+
+
+
