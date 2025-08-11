@@ -771,7 +771,7 @@ so that normalization is performed over an $(N, E)$ tensor.
 
 #### **Formulas**
 
-For each embedding dimension $e$:
+For each embedding dimension $e=1, \ldots, E$:
 
 **Step 1 - Mean:**
 
@@ -834,6 +834,9 @@ $$
 \sigma_{b,r,c}^2 = \frac{1}{E} \sum_{e=1}^E \left(x_{b,r,c,e} - \mu_{b,r,c}\right)^2
 $$
 
+Each of those means/variances describes a different row-column position within a batch, rather than being shared across all samples like in BatchNorm.
+That's why LayerNorm is better for heterogeneous tabular data - it never mixes statistics between rows or datasets.
+
 **Step 3 - Normalize:**
 
 $$
@@ -846,7 +849,7 @@ $$
 y_{b,r,c,e} = \gamma_e \cdot \hat{x}_{b,r,c,e} + \beta_e
 $$
 
-where $\gamma, \beta \in \mathbb{R}^E$ are learned parameters shared across all $(b,r,c)$, but applied elementwise along $E$.
+where $\gamma, \beta \in \mathbb{R}^E$ are learned parameters shared across all $(b,r,c)$, but applied elementwise along $E$. 
 
 
 #### **When is it useful?**
@@ -867,6 +870,22 @@ In the nanoTabPFN architecture, Layer Normalization is used instead of Batch Nor
 1. **Independence of Rows**: Each row in the tabular data represents an independent example, and LayerNorm normalizes across features within each row, preserving this independence
 2. **Heterogeneous Batches**: nanoTabPFN processes batches where each row can come from different datasets or distributions. LayerNorm does not assume that all rows are from the same distribution, making it more robust in this context
 3. **Sample-wise Normalization**: Each cell is normalized using only its own embedding vector, ensuring independence across the batch
+
+
+### Visualizing BatchNorm vs LayerNorm in nanoTabPFN
+
+Below we compare the normalization axes for BatchNorm and LayerNorm using a toy tensor of shape (B=2, R=3, C+1=4, E=5) showing the means only, where B is the batch size, R is the number of rows, C+1 is the number of columns (including the target), and E is the embedding size.
+
+![Normalization](figures/normalization_mean.png)
+
+**Left: BatchNorm** - For each embedding dimension $e \in [1, E]$, BatchNorm computes a single mean $\mu_e$ across all $(B, R, C+1)$ positions in the batch. Each column’s color is constant vertically, showing that all positions share the same statistics for that dimension.
+
+**Right: LayerNorm** - For each position $(b, r, c)$, LayerNorm computes its own mean $\mu_{b,r,c}$ across the $E$ embedding dimensions. Each row’s color is independent, showing that statistics are computed separately for every position.
+
+This illustrates why BatchNorm mixes statistics across heterogeneous datasets, while LayerNorm keeps each cell independent - a key property for tabular in-context learning.
+
+
+
 ## Output Selection and Decoding
 
 After processing through the transformer stack, the model extracts predictions:
