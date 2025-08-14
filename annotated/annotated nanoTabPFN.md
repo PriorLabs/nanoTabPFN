@@ -86,6 +86,7 @@ Query (Test Data):
 ```
 
 **No Parameter Updates**: The model processes the entire dataset (train + test) in a single forward pass without any gradient updates
+
 **Context-Aware Predictions**: Each test prediction is informed by:
    - Which training examples have similar feature patterns
    - What targets those similar examples had
@@ -422,6 +423,22 @@ Row_m    embed_m_1    embed_m_2    ...    embed_m_n    embed_m_t
 
 Each cell contains an `embedding_size`-dimensional vector, creating a 4D tensor that preserves both the tabular structure and individual feature representations.
 
+### Understanding Batch Structure in nanoTabPFN
+
+When you have a tensor of shape `(batch_size, num_rows, num_features, embedding_size)`, the `batch_size` represents the number of independent datasets being processed simultaneously. For `batch_size = 512`, this means:
+- Each entry in the batch is a complete dataset with `num_rows` and `num_features` 
+- All 512 datasets are processed in parallel through the transformer
+
+**Independent Processing**: Each dataset in the batch is processed independently - there's no attention or information sharing between different batch elements. The reshaping operations in the dual attention mechanism ensure that attention computations happen within individual datasets, never across batch boundaries.
+
+**Parameter Sharing Across Batches and Sequences**: Even though each sequence (column-wise or row-wise) is processed independently - with no attention or mixing between different batch entries or sequences - the same Transformer layers and weights are applied to all of them. Concretely:
+
+* **Weight Sharing:** The Query, Key, and Value projections, the multi-head attention parameters, the feed-forward network weights, layer norms, and all learned parameters are shared for every sequence
+* **Consistent Modeling:** Each row or column sequence is modeled using the same learned representation capacity, improving generalization and reducing parameter count
+* **Parallelism & Efficiency:** You get full parallel processing on the batch axis while learning a shared set of Transformer parameters
+
+
+
 ### Design Choice: Including Targets from the Start
 
 A crucial design decision in TabPFN is that features and targets interact through attention from the very beginning. The target column is treated as just another feature column that participates in both feature-wise and datapoint-wise attention.
@@ -733,15 +750,6 @@ Feature attention does not require separating train and test rows, since:
 ## Why Feature and then Datapoint Attention?
 
 The order of attention operations in TabPFN - feature attention followed by datapoint attention - is a deliberate design choice that differs from alternatives like [TabICL](https://github.com/soda-inria/tabicl), which reverses this order. This sequence has important implications for how information flows through the model.  It is important to note that the optimal attention order remains an open research question - different orderings may work better for different types of tabular data or tasks, and more empirical investigation is needed to determine when each approach works best.
-
-
-## Parameter Sharing Across Batches and Sequences
-
-Even though each sequence (column-wise or row-wise) is processed independently - with no attention or mixing between different batch entries or sequences - the same Transformer layers and weights are applied to all of them. Concretely:
-
-* **Weight Sharing:** The Query, Key, and Value projections, the multi-head attention parameters, the feed-forward network weights, layer norms, and all learned parameters are shared for every sequence
-* **Consistent Modeling:** Each row or column sequence is modeled using the same learned representation capacity, improving generalization and reducing parameter count
-* **Parallelism & Efficiency:** You get full parallel processing on the batch axis while learning a shared set of Transformer parameters
 
 ## **Layer Normalization vs. Batch Normalization**
 
