@@ -62,6 +62,7 @@ from nanotabpfn.train import train
 from nanotabpfn.utils import get_default_device
 from nanotabpfn.interface import NanoTabPFNClassifier
 from torch.nn import CrossEntropyLoss
+from nanotabpfn.callbacks import ConsoleLoggerCallback
 ```
 then we instantiate our model and loss criterion:
 ```python
@@ -81,17 +82,12 @@ prior = PriorDumpDataLoader(filename='50x3_3_100k_classification.h5', num_steps=
 ```
 and finally train our model:
 ```python
-def epoch_callback(epoch, epoch_time, mean_loss, model):
-    classifier = NanoTabPFNClassifier(model, device)
-    # you can add your own eval code here that runs after every epoch
-    print(f'epoch {epoch:5d} | time {epoch_time:5.2f}s | mean loss {mean_loss:5.2f}', flush=True)
-
 trained_model, loss = train(
     model=model,
     prior=prior,
     criterion=criterion,
     epochs=80,
     device=device,
-    epoch_callback=epoch_callback
+    callbacks=[ConsoleLoggerCallback()]
 )
 ```

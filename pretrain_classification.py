@@ -5,6 +5,7 @@ import numpy as np
 from torch import nn
 from functools import partial
 
+from nanotabpfn.callbacks import ConsoleLoggerCallback
 from nanotabpfn.priors import PriorDumpDataLoader
 from nanotabpfn.model import NanoTabPFNModel
 from nanotabpfn.train import train
@@ -29,15 +30,14 @@ parser.add_argument("-steps", type=int, default=100, help="number of steps that 
 parser.add_argument("-epochs", type=int, default=10000, help="number of epochs to train for")
 parser.add_argument("-loadcheckpoint", type=str, default=None, help="checkpoint from which to continue training")
 
-
 args = parser.parse_args()
 
 set_randomness_seed(2402)
 
 device = get_default_device()
-ckpt=None
+ckpt = None
 if args.loadcheckpoint:
-    ckpt=torch.load(args.loadcheckpoint)
+    ckpt = torch.load(args.loadcheckpoint)
 
 prior = PriorDumpDataLoader(filename=args.priordump, num_steps=args.steps, batch_size=args.batchsize, device=device, starting_index=args.steps*(ckpt['epoch'] if ckpt else 0))
 
@@ -60,17 +60,24 @@ datasets.append(train_test_split(*load_iris(return_X_y=True), test_size=0.5, ran
 datasets.append(train_test_split(*load_wine(return_X_y=True), test_size=0.5, random_state=42))
 datasets.append(train_test_split(*load_breast_cancer(return_X_y=True), test_size=0.5, random_state=42))
 
-def epoch_callback(epoch, epoch_time, mean_loss, model):
-    classifier = NanoTabPFNClassifier(model, device)
-    scores = []
-    for  X_train, X_test, y_train, y_test in datasets:
-        classifier.fit(X_train, y_train)
-        pred = classifier.predict(X_test)
-        scores.append(accuracy_score(y_test, pred))
-    avg_score = sum(scores)/len(scores)
-    print(f'epoch {epoch:5d} | time {epoch_time:5.2f}s | mean loss {mean_loss:5.2f} | avg accuracy {avg_score:.3f}', flush=True)
+
+class EvaluationLoggerCallback(ConsoleLoggerCallback):
+    def __init__(self, datasets):
+        self.datasets = datasets
+
+    def on_epoch_end(self, epoch: int, epoch_time: float, loss: float, model, **kwargs):
+        classifier = NanoTabPFNClassifier(model, device)
+        scores = []
+        for X_train, X_test, y_train, y_test in self.datasets:
+            classifier.fit(X_train, y_train)
+            pred = classifier.predict(X_test)
+            scores.append(accuracy_score(y_test, pred))
+        avg_score = sum(scores) / len(scores)
+        print(f'epoch {epoch:5d} | time {epoch_time:5.2f}s | mean loss {loss:5.2f} | avg accuracy {avg_score:.3f}',
+              flush=True)
 
 
+callbacks = [EvaluationLoggerCallback(datasets)]
 
 trained_model, loss = train(
     model=model,
@@ -80,7 +87,7 @@ trained_model, loss = train(
     accumulate_gradients=args.accumulate,
     lr=args.lr,
     device=device,
-    epoch_callback=epoch_callback,
+    callbacks=callbacks,
     ckpt=ckpt
 )
 

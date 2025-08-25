@@ -1,6 +1,7 @@
 import argparse
 import torch
 
+from nanotabpfn.callbacks import ConsoleLoggerCallback
 from nanotabpfn.priors import PriorDumpDataLoader
 from nanotabpfn.model import NanoTabPFNModel
 from nanotabpfn.train import train
@@ -30,15 +31,14 @@ parser.add_argument("-epochs", type=int, default=10000, help="number of epochs t
 parser.add_argument("-loadcheckpoint", type=str, default=None, help="checkpoint from which to continue training")
 parser.add_argument("-n_buckets", type=int, default=100, help="number of buckets for the data loader")
 
-
 args = parser.parse_args()
 
 set_randomness_seed(2402)
 
 device = get_default_device()
-ckpt=None
+ckpt = None
 if args.loadcheckpoint:
-    ckpt=torch.load(args.loadcheckpoint)
+    ckpt = torch.load(args.loadcheckpoint)
 
 prior = PriorDumpDataLoader(filename=args.priordump, num_steps=args.steps, batch_size=args.batchsize, device=device, starting_index=args.steps*(ckpt['epoch'] if ckpt else 0))
 
@@ -69,17 +69,24 @@ dist = FullSupportBarDistribution(bucket_edges)
 datasets = []
 datasets.append(train_test_split(*load_diabetes(return_X_y=True), test_size=0.5, random_state=42))
 
-def epoch_callback(epoch, epoch_time, mean_loss, model, dist):
-    regressor = NanoTabPFNRegressor(model, dist, device)
-    scores = []
-    for  X_train, X_test, y_train, y_test in datasets:
-        regressor.fit(X_train, y_train)
-        pred = regressor.predict(X_test)
-        scores.append(r2_score(y_test, pred))
-        print(r2_score(y_test, pred))
-    avg_score = sum(scores)/len(scores)
-    print(f'epoch {epoch:5d} | time {epoch_time:5.2f}s | mean loss {mean_loss:5.2f} | avg r2 score {avg_score:.3f}', flush=True)
 
+class EvaluationLoggerCallback(ConsoleLoggerCallback):
+    def __init__(self, datasets):
+        self.datasets = datasets
+
+    def on_epoch_end(self, epoch: int, epoch_time: float, loss: float, model, **kwargs):
+        regressor = NanoTabPFNRegressor(model, dist, device)
+        scores = []
+        for X_train, X_test, y_train, y_test in datasets:
+            regressor.fit(X_train, y_train)
+            pred = regressor.predict(X_test)
+            scores.append(r2_score(y_test, pred))
+        avg_score = sum(scores) / len(scores)
+        print(f'epoch {epoch:5d} | time {epoch_time:5.2f}s | mean loss {loss:5.2f} | avg r2 score {avg_score:.3f}',
+              flush=True)
+
+
+callbacks = [EvaluationLoggerCallback(datasets)]
 
 trained_model, loss = train(
     model=model,
@@ -89,7 +96,7 @@ trained_model, loss = train(
     accumulate_gradients=args.accumulate,
     lr=args.lr,
     device=device,
-    epoch_callback=epoch_callback,
+    callbacks=callbacks,
     ckpt=ckpt
 )
 
