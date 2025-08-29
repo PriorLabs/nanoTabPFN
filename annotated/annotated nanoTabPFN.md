@@ -142,25 +142,6 @@ This is fundamentally different from traditional ML approaches that require trai
 
 While transformers were originally designed for sequential data, they offer several advantages for tabular data that explain their emergence as the dominant architecture for tabular foundation models:
 
-### **Permutation Equivariance**
-
-Equivariance vs. invariance: Equivariance means that if you permute the inputs, the outputs permute in exactly the same way; invariance means the outputs remain unchanged regardless of input order.
-
-Why this matters for tabular data: In tabular tasks, we want permutation invariance in our final predictions - the model's predictions shouldn't depend on arbitrary row or column ordering. Transformers achieve this through their natural permutation equivariance property, which maintains consistent internal behavior under reordering while enabling invariant final outputs through appropriate aggregation or selection mechanisms.
-
-How transformers handle different dimensions:
-
-- Feature columns have semantic identity: feature order in tabular data is arbitrary (columns can be reordered), but each feature has its own semantic meaning (e.g., "age" ≠ "income" ≠ "temperature"). Without extra information, a transformer will treat all feature columns symmetrically - swapping two columns simply swaps their embeddings, with no way for the model to know which feature is which. This preserves symmetry but destroys feature identity. In practice, TabPFN and similar models add positional/feature index embeddings (a unique learned vector for each feature) to intentionally break pure permutation equivariance over columns, allowing the model to preserve and consistently recognize each feature's identity even if the columns are reordered.
-- Sample rows are exchangeable: for i.i.d. data, row order typically doesn't matter (samples are exchangeable), and unlike features, individual rows have no fixed semantic identity - they are just independent observations drawn from the same distribution. For most tabular tasks, we care only about making the correct prediction for each row, not about the position of that row in the dataset. Permutation equivariance ensures that if you shuffle the rows in the input, the model's outputs shuffle in exactly the same way, preserving the one-to-one correspondence between each sample and its prediction.
-
-### **Natural Handling of Set-Structured Data**
-Tabular data can be viewed as sets where:
-- Each row is an element in a set of samples
-- Each column is an element in a set of features
-- Transformers' set-to-set mapping aligns with this structure
-- No artificial ordering constraints are imposed
-- Other models like [TabICL](https://github.com/soda-inria/tabicl) use Set-Transformer architectures to further leverage the set structure of tabular data
-
 ### **Variable-Size Inputs**
 Through tokenization, transformers elegantly handle:
 - Datasets with different numbers of features
@@ -187,6 +168,48 @@ Unlike sequential models, transformers offer:
 - Efficient batch processing on modern hardware (GPUs)
 
 These advantages make transformers well-suited for foundation models for diverse tabular datasets without task-specific modifications. While challenges remain - particularly the quadratic complexity for large datasets - the flexibility, and expressiveness make transformers the architecture of choice for tabular foundation models. It is important to note that TabPFN uses only the transformer encoder because tabular prediction is a task where we need to classify/regress all test samples simultaneously based on the provided context, not generate outputs sequentially like in language generation. The "decoder" in TabPFN is simply a MLP that maps the enriched target embeddings from the transformer encoder to final predictions - it's not a transformer decoder at all. This design mirrors architectures where transformer encoders extract rich representations that are then passed through task-specific heads, rather than GPT-style decoders that generate tokens autoregressively.
+
+
+## A note on Permutation Equivariance
+
+**Equivariance vs. invariance:**
+
+* **Equivariance** means that if you permute the inputs, the outputs permute in exactly the same way.
+* **Invariance** means the outputs remain unchanged regardless of input order.
+
+**The challenge:**
+Self-attention without positional encodings is permutation equivariant (shuffling inputs shuffles outputs consistently). However, the addition of positional encodings, which is standard in Transformers for sequences, breaks this property and makes the model order-sensitive. This clashes with tabular data, where both row and column order should ideally be irrelevant to predictions.
+
+**Why this matters for tabular data:**
+Tabular data can be framed as sets:
+
+* Each row is an element in a set of samples
+* Each column is an element in a set of features
+* No artificial ordering constraints should be imposed
+
+In tabular tasks, we want permutation invariance in the final predictions - the model’s outputs shouldn’t depend on arbitrary row or column ordering. 
+
+**Feature columns require identity disambiguation:**
+Column order is arbitrary, but each feature has distinct semantics (e.g., "age" ≠ "income"). Without extra information, a Transformer would treat features interchangeably, unable to recognize which value belongs to which feature. To solve this, TabPFN adds feature index embeddings (a unique learned vector per feature position). This preserves feature identity but sacrifices permutation invariance across columns.
+
+**TabPFN’s workaround:**
+<div align="center">
+
+['Without ensembling, TabPFN is not invariant to feature position due to using a transformer.'](https://github.com/PriorLabs/TabPFN/blob/main/src/tabpfn/config.py#L46)<br>
+['Without ensembling, TabPFN is not invariant to class order due to using a transformer.'](https://github.com/PriorLabs/TabPFN/blob/main/src/tabpfn/config.py#L55)
+</div>
+
+Rather than redesigning the architecture, TabPFN restores approximate invariance by ensembling over feature permutations. Multiple estimators (default: 8) see the same data with different column orders, and their predictions are averaged. This cancels out positional biases and yields pseudo-permutation invariance. 
+
+
+**Sample rows are exchangeable:**
+For i.i.d. data, row order is irrelevant. Since TabPFN uses no row positional encodings, the model remains permutation equivariant across rows: shuffling training samples shuffles their contributions consistently. This ensures predictions depend only on the set of examples, not their order.
+
+**Key insight:**
+TabPFN shows that adapting Transformers for tabular foundation models requires breaking symmetry to encode feature identity, then recovering invariance through inference-time ensembling. The model leverages the Transformer’s representation power while respecting the underlying set structure of tabular data.
+
+
+
 
 
 
