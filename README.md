@@ -48,7 +48,11 @@ python pretrain_classification.py -epochs 80 -steps 25 -batchsize 50 -priordump 
 ```
 This should take less than 5 min on a modern NVIDIA GPU (around 10 minutes on Macbook M4 Pro GPU and around 40 min on M4 Pro CPU).
 
-#### Step by Step Explanation
+We also offer a pre-generated dataset containing 1.28M tables with 50 datapoints and 3 features each for regression [here](https://ml.informatik.uni-freiburg.de/research-artifacts/pfefferle/nanoTabPFN/50x3_1280k_regression.h5).
+
+You can pretrain on it using `python pretrain_regressor.py`.
+
+#### Step by Step Explanation (Classifier)
 
 First we import our Architecture, Prior interface and training loop, etc.
 ```python
@@ -58,6 +62,7 @@ from nanotabpfn.train import train
 from nanotabpfn.utils import get_default_device
 from nanotabpfn.interface import NanoTabPFNClassifier
 from torch.nn import CrossEntropyLoss
+from nanotabpfn.callbacks import ConsoleLoggerCallback
 ```
 then we instantiate our model and loss criterion:
 ```python
@@ -77,17 +82,15 @@ prior = PriorDumpDataLoader(filename='50x3_3_100k_classification.h5', num_steps=
 ```
 and finally train our model:
 ```python
-def epoch_callback(epoch, epoch_time, mean_loss, model):
-    classifier = NanoTabPFNClassifier(model, device)
-    # you can add your own eval code here that runs after every epoch
-    print(f'epoch {epoch:5d} | time {epoch_time:5.2f}s | mean loss {mean_loss:5.2f}', flush=True)
-
 trained_model, loss = train(
     model=model,
     prior=prior,
     criterion=criterion,
     epochs=80,
     device=device,
-    epoch_callback=epoch_callback
+    callbacks=[ConsoleLoggerCallback()]
 )
 ```
+
+### Creating your own datasets
+Check out the [tabularpriors](https://github.com/automl/tabularpriors/) repository to create your own data using publicly available priors.
