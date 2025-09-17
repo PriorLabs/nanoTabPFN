@@ -1,8 +1,9 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
-from torch.nn.modules.transformer import MultiheadAttention, Linear, LayerNorm
-from typing import Tuple, Union
+from torch.nn.modules.transformer import Linear, LayerNorm
+from .attention import MultiheadAttention
+from typing import Tuple
 
 
 class NanoTabPFNModel(nn.Module):
