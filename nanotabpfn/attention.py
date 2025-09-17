@@ -4,7 +4,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from typing import Tuple
 
-
 class MultiheadAttention(nn.Module):
     """
     Minimal Multi-Head Attention using PyTorch's scaled_dot_product_attention (SDPA).

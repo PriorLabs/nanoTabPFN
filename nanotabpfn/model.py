@@ -224,3 +224,4 @@ class Decoder(nn.Module):
             (torch.Tensor) a tensor of shape (batch_size, num_rows, num_outputs)
         """
         return self.linear2(F.gelu(self.linear1(x)))
+

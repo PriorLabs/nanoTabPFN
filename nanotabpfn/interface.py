@@ -174,3 +174,4 @@ class NanoTabPFNRegressor():
             preds = self.normalized_dist.mean(logits)
 
         return preds.cpu().numpy()
+
