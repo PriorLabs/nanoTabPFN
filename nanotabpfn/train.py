@@ -2,16 +2,18 @@ import torch
 from torch import nn
 import time
 from torch.utils.data import DataLoader
-from typing import Tuple, Dict, Callable
+from typing import Dict
 from pfns.bar_distribution import FullSupportBarDistribution
 import schedulefree
 
+from nanotabpfn.callbacks import Callback
 from nanotabpfn.model import NanoTabPFNModel
 from nanotabpfn.utils import get_default_device
 
-def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyLoss | FullSupportBarDistribution, epochs: int,
-          accumulate_gradients: int = 1, lr: float = 1e-4, device: torch.device = None,
-	  epoch_callback: Callable[[int, float, float, NanoTabPFNModel], None] = None, ckpt: Dict[str, torch.Tensor] = None):
+
+def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyLoss | FullSupportBarDistribution,
+          epochs: int, accumulate_gradients: int = 1, lr: float = 1e-4, device: torch.device = None,
+          callbacks: list[Callback]=None, ckpt: Dict[str, torch.Tensor] = None):
     """
     Trains our model on the given prior using the given criterion.
 
@@ -22,14 +24,17 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
         epochs: (int) the number of epochs we train for, the number of steps that constitute an epoch are decided by the prior
         accumulate_gradients: (int) the number of gradients to accumulate before updating the weights
         device: (torch.device) the device we are using
-        epoch_callback: (Callable[[int, float, float, NanoTabPFNModel], None]) optional callback function that will be called
-	                at the end of each epoch with the current epoch, epoch duration, mean loss, and the model,
-			intended to be used for logging/validation/evaluation
+        callbacks: A list of callback instances to execute at the end of each epoch. These can be used for
+            logging, validation, or other custom actions.
+        ckpt (Dict[str, torch.Tensor], optional): A checkpoint dictionary containing the model and optimizer states,
+            as well as the last completed epoch. If provided, training resumes from this checkpoint.
 
     Returns:
         (torch.Tensor) a tensor of shape (num_rows, batch_size, num_features, embedding_size)
     """
     # print(f"Using a Transformer with {sum(p.numel() for p in model.parameters())/1000/1000:.{2}f} M parameters")
+    if callbacks is None:
+        callbacks = []
     if not device:
         device = get_default_device()
     model.to(device)
@@ -41,8 +46,8 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
     assert prior.num_steps % accumulate_gradients == 0, 'num_steps must be divisible by accumulate_gradients'
 
     try:
-        for epoch in range(ckpt['epoch']+1 if ckpt else 1, epochs + 1):
-            start_time = time.time()
+        for epoch in range(ckpt['epoch'] + 1 if ckpt else 1, epochs + 1):
+            epoch_start_time = time.time()
             model.train()  # Turn on the train mode
             optimizer.train()
             total_loss = 0.
@@ -81,9 +86,15 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
             }
             torch.save(training_state, 'latest_checkpoint.pth')
 
-            if epoch_callback:
-                epoch_callback(epoch, end_time-start_time, mean_loss, model)
+            for callback in callbacks:
+                if type(criterion) is FullSupportBarDistribution:
+                    callback.on_epoch_end(epoch, end_time - epoch_start_time, mean_loss, model, dist=criterion)
+                else:
+                    callback.on_epoch_end(epoch, end_time - epoch_start_time, mean_loss, model)
     except KeyboardInterrupt:
         pass
+    finally:
+        for callback in callbacks:
+            callback.close()
 
     return model, total_loss

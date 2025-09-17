@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "nanotabpfn"
 version = "0.0.1"
 authors = [
-  { name="Alexander Pfefferle", email="pfeffera@cs.uni-freiburg.de" },
+    { name = "Alexander Pfefferle", email = "pfeffera@cs.uni-freiburg.de" },
 ]
 description = "A Playground for Tabular Foundation Models"
 readme = "README.md"
@@ -23,8 +23,12 @@ dependencies = [
     "scikit-learn>=1.5",
     "schedulefree>=1.4",
     "pfns==0.3.0",
+    "openml==0.15.1",
 ]
 
+[project.optional-dependencies]
+wandb = ["wandb>=0.20"]
+tensorboard = ["tensorboard>=2.19"]
 [project.urls]
 Homepage = "https://github.com/PriorLabs/nanoTabPFN"
 Issues = "https://github.com/PriorLabs/nanoTabPFN/issues"

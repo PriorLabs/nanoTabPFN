@@ -1,1 +1,1 @@
-from nanotabpfn.interface import NanoTabPFNClassifier
+from nanotabpfn.interface import NanoTabPFNClassifier, NanoTabPFNRegressor

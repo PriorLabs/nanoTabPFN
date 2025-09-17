@@ -29,7 +29,10 @@ class PriorDumpDataLoader(DataLoader):
         self.batch_size = batch_size
         with h5py.File(self.filename, "r") as f:
             self.num_datapoints_max = f['X'].shape[0]
-            self.max_num_classes = f['max_num_classes'][0]
+            if "max_num_classes" in f:
+                self.max_num_classes = f["max_num_classes"][0]
+            else:
+                self.max_num_classes = None
             self.problem_type = f['problem_type'][()].decode('utf-8')
         self.device = device
         self.pointer = starting_index
