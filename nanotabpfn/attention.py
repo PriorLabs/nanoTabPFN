@@ -28,8 +28,10 @@ class MultiheadAttention(nn.Module):
         Number of attention heads (H). Must divide embed_dim.
     batch_first : bool, default True
         If True, input/output is (B, T, E). If False, (T, B, E).
-    bias : bool, default True
+    qkv_bias : bool, default False
         Include bias terms in the q/k/v/out projections.
+    out_proj_bias : bool, default True
+        Include bias term in the output projection.
     device, dtype : Optional
         Device and dtype.
     """
@@ -39,7 +41,8 @@ class MultiheadAttention(nn.Module):
         embed_dim: int,
         num_heads: int,
         batch_first: bool = True,
-        bias: bool = True,
+        qkv_bias: bool = False,
+        out_proj_bias: bool = False,
         device: torch.device = None,
         dtype: torch.dtype = None,
     ):
@@ -51,10 +54,10 @@ class MultiheadAttention(nn.Module):
         self.batch_first = batch_first
 
         fw = {"device": device, "dtype": dtype}
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias, **fw)
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias, **fw)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias, **fw)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias, **fw)
+        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=qkv_bias, **fw)
+        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=qkv_bias, **fw)
+        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=qkv_bias, **fw)
+        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=out_proj_bias, **fw)
 
     def forward(
         self,
