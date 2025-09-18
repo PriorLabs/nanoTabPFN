@@ -30,7 +30,7 @@ class MultiheadAttention(nn.Module):
         If True, input/output is (B, T, E). If False, (T, B, E).
     qkv_bias : bool, default False
         Include bias terms in the q/k/v/out projections.
-    out_proj_bias : bool, default True
+    out_proj_bias : bool, default False
         Include bias term in the output projection.
     device, dtype : Optional
         Device and dtype.
