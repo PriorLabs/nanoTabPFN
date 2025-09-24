@@ -23,8 +23,8 @@ def init_model_from_state_dict_file(file_path):
     embedding_size = state_dict['feature_encoder.linear_layer.weight'].shape[0]
     mlp_hidden_size = state_dict['decoder.linear1.weight'].shape[0]
     num_outputs = state_dict['decoder.linear2.weight'].shape[0]
-    num_layers = sum('self_attn_between_datapoints.in_proj_weight' in k for k in state_dict)
-    num_heads = state_dict['transformer_encoder.transformer_blocks.0.self_attn_between_datapoints.in_proj_weight'].shape[1]//64
+    num_layers = sum('self_attn_between_datapoints.q_proj.weight' in k for k in state_dict)
+    num_heads = state_dict['transformer_encoder.transformer_blocks.0.self_attn_between_datapoints.q_proj.weight'].shape[1]//64
     model = NanoTabPFNModel(
         num_attention_heads=num_heads,
         embedding_size=embedding_size,
@@ -173,3 +173,4 @@ class NanoTabPFNRegressor():
             preds = self.normalized_dist.mean(logits)
 
         return preds.cpu().numpy()
+
