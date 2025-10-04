@@ -20,20 +20,18 @@ def make_global_bucket_edges(filename, n_buckets=100, device=get_default_device(
     with h5py.File(filename, "r") as f:
         y = f["y"]
         num_tables, num_datapoints = y.shape
-        total = num_tables * num_datapoints
 
-        if max_y >= total:
-            ys_concat = y[...].reshape(-1)
-        else:
-            full_rows = max_y // num_datapoints
-            rem =  max_y % num_datapoints
+        ys_normalised = []
+        num_tables_to_use = min(num_tables, max_y // num_datapoints)
 
-            parts = []
-            if full_rows > 0:
-                parts.append(y[:full_rows, :].reshape(-1))
-            if rem > 0:
-                parts.append(y[full_rows, :rem].reshape(-1))
-            ys_concat = np.concatenate(parts, axis=0) if parts else np.empty((0,), dtype=y.dtype)
+        for i in range(num_tables_to_use):
+            y_i = np.array(y[i, :], dtype=np.float32)
+            y_i_mean = np.mean(y_i)
+            y_i_std = np.std(y_i) + 1e-8
+            y_i_normalised = (y_i - y_i_mean) / y_i_std
+            ys_normalised.append(y_i_normalised)
+
+    ys_concat = np.concatenate(ys_normalised, axis=0)
 
     if ys_concat.size < n_buckets:
         raise ValueError(f"Too few target samples ({ys_concat.size}) to compute {n_buckets} buckets.")
